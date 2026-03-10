@@ -51,8 +51,6 @@ pyinstaller --onefile --noconsole --add-data "fonts;fonts" main.py
 pyinstaller --onefile --noconsole --add-data "fonts:fonts" main.py
 ```
 
-If you're on Windows with WSL installed, run `build.bat` to compile for both Windows and Linux in one step.
-However you should have both a .venv for Windows and a .venvl for Linux (the script sources .venvl)
 ## How It Works
 
 The tool has a two-file core:

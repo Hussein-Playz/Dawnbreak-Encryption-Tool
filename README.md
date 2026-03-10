@@ -52,7 +52,7 @@ pyinstaller --onefile --noconsole --add-data "fonts:fonts" main.py
 ```
 
 If you're on Windows with WSL installed, run `build.bat` to compile for both Windows and Linux in one step.
-
+However you should have both a .venv for Windows and a .venvl for Linux (the script sources .venvl)
 ## How It Works
 
 The tool has a two-file core:
@@ -91,7 +91,6 @@ encryption_tool/
 ├── encrypter.py         # Encryption core (GUI-agnostic)
 ├── requirements.txt     # Python dependencies
 ├── build.bat            # Cross-compile script (Windows + WSL)
-├── main.spec            # PyInstaller config
 ├── LICENSE              # Unlicense (public domain)
 ├── fonts/               # Cinzel font family
 │   ├── Cinzel-Bold.ttf
@@ -109,3 +108,5 @@ This project is released into the public domain under the [Unlicense](LICENSE).
 ### Font License
 
 This project includes the [Cinzel](https://github.com/NDISCOVER/Cinzel) font family, Copyright 2020 The Cinzel Project Authors. Cinzel is licensed under the [SIL Open Font License, Version 1.1](fonts/OFL.txt). The full license text is distributed with this project at `fonts/OFL.txt` as required by the OFL.
+<br><br><br>
+**This README.md and all comments in the code were generated using AI as am generally bad at creating such things, along with the colors of the UI elements, those were also chosen by AI since i wasnt sure what colors to pick.**

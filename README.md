@@ -1,45 +1,111 @@
 # Dawnbreak Encryption Tool
 
-A cross-platform desktop GUI app (tkinter) for AES file/folder encryption using Python's `cryptography` library (Fernet/PBKDF2).
+A cross-platform desktop app for encrypting and decrypting files and folders with AES-256, built with Python and Tkinter.
 
-## Commands
+![Python](https://img.shields.io/badge/Python-3.x-blue)
+![License](https://img.shields.io/badge/License-Unlicense-green)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+
+## Features
+
+- **AES-256 encryption** via Fernet (AES-CBC + HMAC) with PBKDF2-HMAC-SHA256 key derivation (100k iterations)
+- **File and folder encryption** — folders are compressed to ZIP before encrypting
+- **Secure deletion** — multi-pass overwrite of original files after encryption
+- **Drag-and-drop** support (optional, via `tkinterdnd2`)
+- **Dark and light themes**
+- **Password strength meter** with real-time feedback
+- **Verify** encrypted files without decrypting to disk
+- **Batch operations** — encrypt or decrypt multiple items at once
+- **Standalone executables** — build with PyInstaller for any platform
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.x
+- pip
+
+### Install
 
 ```bash
-# Run the app
-.venv/Scripts/python main.py        # Windows
-.venv/bin/python main.py             # macOS/Linux
-
-# Install dependencies
 pip install -r requirements.txt
+```
 
-# Build standalone executable (Windows)
+### Run
+
+```bash
+# Windows
+python main.py
+
+# macOS / Linux
+python3 main.py
+```
+
+### Build Standalone Executable
+
+```bash
+# Windows
 pyinstaller --onefile --noconsole --add-data "fonts;fonts" main.py
 
-# Build standalone executable (Linux/macOS — note colon separator)
+# macOS / Linux
 pyinstaller --onefile --noconsole --add-data "fonts:fonts" main.py
 ```
 
-There are no automated tests. Use `test_folder/` for manual encrypt/decrypt testing.
+If you're on Windows with WSL installed, run `build.bat` to compile for both Windows and Linux in one step.
 
-## Architecture
+## How It Works
 
-**Two-file core:**
-- `encrypter.py` — Pure encryption logic, no GUI. All functions accept optional `progress_callback` and `do_secure_delete` params. Encryption pipeline: password → PBKDF2-HMAC-SHA256 (100k iterations) + random salt → Fernet key → AES-CBC + HMAC. Folders are zipped before encryption. File format: `salt (16 bytes) + fernet token`.
-- `main.py` — Tkinter GUI app. All encryption runs in background threads via `threading.Thread` with `self.after()` for thread-safe UI updates. Themes (DARK/LIGHT dicts) are applied recursively to all child widgets.
+The tool has a two-file core:
 
-**Key design patterns:**
-- `encrypter.py` is GUI-agnostic — it can be used standalone or from CLI
-- Progress callbacks use `(percent: int, message: str)` signature
-- Cross-platform font loading in `_load_fonts()` uses platform-specific APIs (Windows `AddFontResourceExW`, macOS `~/Library/Fonts`, Linux `~/.local/share/fonts`)
-- `tkinterdnd2` for drag-and-drop is optional — app degrades gracefully if not installed
+| File | Role |
+|------|------|
+| `encrypter.py` | Pure encryption logic — no GUI dependencies, can be used standalone or from CLI |
+| `main.py` | Tkinter GUI with theming, threading, and drag-and-drop |
 
-**Persistent files (generated at runtime):**
-- `config.json` — last browsed directory
-- `dawnbreak.log` — operation log (timestamp, operation, file, status)
+### Encryption Pipeline
 
-## Conventions
+```
+Password → PBKDF2-HMAC-SHA256 (100k iterations + random salt) → Fernet key → AES-CBC + HMAC
+```
 
-- App title is "Dawnbreak Encryption Tool"
-- Fonts: Cinzel family from `fonts/` directory (Bold, SemiBold, Medium, Regular are used; Black and ExtraBold are unused)
-- Encrypted files use `.locked` extension
-- The `verify_file()` function checks integrity without writing output — it decrypts in memory and discards the result
+Encrypted file format: `salt (16 bytes) + Fernet token`
+
+Folders are zipped into a single archive before encryption. Encrypted files use the `.locked` extension.
+
+### Runtime Files
+
+The app generates these files during use (not tracked in git):
+
+- `config.json` — remembers the last browsed directory
+- `dawnbreak.log` — operation log with timestamps
+
+## Testing
+
+There are no automated tests. Use the `test_folder/` directory for manual encrypt/decrypt verification — it contains sample files and folders with identical text content you can modify.
+
+## Project Structure
+
+```
+encryption_tool/
+├── main.py              # GUI application
+├── encrypter.py         # Encryption core (GUI-agnostic)
+├── requirements.txt     # Python dependencies
+├── build.bat            # Cross-compile script (Windows + WSL)
+├── main.spec            # PyInstaller config
+├── LICENSE              # Unlicense (public domain)
+├── fonts/               # Cinzel font family
+│   ├── Cinzel-Bold.ttf
+│   ├── Cinzel-Medium.ttf
+│   ├── Cinzel-Regular.ttf
+│   ├── Cinzel-SemiBold.ttf
+│   └── OFL.txt          # SIL Open Font License
+└── test_folder/         # Manual test files
+```
+
+## License
+
+This project is released into the public domain under the [Unlicense](LICENSE).
+
+### Font License
+
+This project includes the [Cinzel](https://github.com/NDISCOVER/Cinzel) font family, Copyright 2020 The Cinzel Project Authors. Cinzel is licensed under the [SIL Open Font License, Version 1.1](fonts/OFL.txt). The full license text is distributed with this project at `fonts/OFL.txt` as required by the OFL.

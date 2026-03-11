@@ -1,13 +1,27 @@
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from argon2.low_level import hash_secret_raw, Type as Argon2Type
 import base64
 import os
 import zipfile
 
+# v2 format constants
+MAGIC = b"DBRK"
+FORMAT_VERSION = 0x02
+SALT_SIZE = 32
+NONCE_SIZE = 12
 
-def derive_key(password: str, salt: bytes) -> bytes:
-    """Derive a secure key using PBKDF2HMAC."""
+# Argon2id parameters (OWASP recommended minimum)
+ARGON2_TIME_COST = 3
+ARGON2_MEMORY_COST = 65536  # 64 MiB
+ARGON2_PARALLELISM = 4
+ARGON2_HASH_LEN = 32
+
+
+def _derive_key_v1(password: str, salt: bytes) -> bytes:
+    """Derive a key using PBKDF2HMAC (legacy v1 format)."""
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -18,22 +32,51 @@ def derive_key(password: str, salt: bytes) -> bytes:
     return base64.urlsafe_b64encode(key)
 
 
+def _derive_key_v2(password: str, salt: bytes) -> bytes:
+    """Derive a 256-bit key using Argon2id."""
+    return hash_secret_raw(
+        secret=password.encode(),
+        salt=salt,
+        time_cost=ARGON2_TIME_COST,
+        memory_cost=ARGON2_MEMORY_COST,
+        parallelism=ARGON2_PARALLELISM,
+        hash_len=ARGON2_HASH_LEN,
+        type=Argon2Type.ID,
+    )
+
+
+def _is_v2(data: bytes) -> bool:
+    """Check if encrypted data uses the v2 format."""
+    return len(data) >= 5 and data[:4] == MAGIC and data[4] == FORMAT_VERSION
+
+
 def encrypt_data(data: bytes, password: str) -> bytes:
-    """Encrypt raw data with AES-256."""
-    salt = os.urandom(16)
-    key = derive_key(password, salt)
-    fernet = Fernet(key)
-    encrypted = fernet.encrypt(data)
-    return salt + encrypted
+    """Encrypt raw data with AES-256-GCM + Argon2id (v2 format)."""
+    salt = os.urandom(SALT_SIZE)
+    nonce = os.urandom(NONCE_SIZE)
+    key = _derive_key_v2(password, salt)
+    aesgcm = AESGCM(key)
+    ciphertext = aesgcm.encrypt(nonce, data, None)
+    # Format: MAGIC + VERSION + salt + nonce + ciphertext (includes 16-byte GCM tag)
+    return MAGIC + bytes([FORMAT_VERSION]) + salt + nonce + ciphertext
 
 
 def decrypt_data(encrypted_data: bytes, password: str) -> bytes:
-    """Decrypt raw data."""
-    salt = encrypted_data[:16]
-    encrypted = encrypted_data[16:]
-    key = derive_key(password, salt)
-    fernet = Fernet(key)
-    return fernet.decrypt(encrypted)
+    """Decrypt raw data. Auto-detects v2 (AES-256-GCM) or v1 (Fernet) format."""
+    if _is_v2(encrypted_data):
+        salt = encrypted_data[5:5 + SALT_SIZE]
+        nonce = encrypted_data[5 + SALT_SIZE:5 + SALT_SIZE + NONCE_SIZE]
+        ciphertext = encrypted_data[5 + SALT_SIZE + NONCE_SIZE:]
+        key = _derive_key_v2(password, salt)
+        aesgcm = AESGCM(key)
+        return aesgcm.decrypt(nonce, ciphertext, None)
+    else:
+        # v1 legacy fallback (Fernet + PBKDF2)
+        salt = encrypted_data[:16]
+        encrypted = encrypted_data[16:]
+        key = _derive_key_v1(password, salt)
+        fernet = Fernet(key)
+        return fernet.decrypt(encrypted)
 
 
 def verify_file(file_path, password):
@@ -46,15 +89,23 @@ def verify_file(file_path, password):
     try:
         with open(file_path, "rb") as f:
             encrypted_data = f.read()
-        salt = encrypted_data[:16]
-        encrypted = encrypted_data[16:]
-        key = derive_key(password, salt)
-        fernet = Fernet(key)
-        fernet.decrypt(encrypted)
+        if _is_v2(encrypted_data):
+            salt = encrypted_data[5:5 + SALT_SIZE]
+            nonce = encrypted_data[5 + SALT_SIZE:5 + SALT_SIZE + NONCE_SIZE]
+            ciphertext = encrypted_data[5 + SALT_SIZE + NONCE_SIZE:]
+            key = _derive_key_v2(password, salt)
+            aesgcm = AESGCM(key)
+            aesgcm.decrypt(nonce, ciphertext, None)
+        else:
+            salt = encrypted_data[:16]
+            encrypted = encrypted_data[16:]
+            key = _derive_key_v1(password, salt)
+            fernet = Fernet(key)
+            fernet.decrypt(encrypted)
         return True, "File is valid and password is correct"
-    except InvalidToken:
-        return False, "Invalid password or file is corrupted"
-    except Exception as e:
+    except (InvalidToken, Exception) as e:
+        if isinstance(e, InvalidToken):
+            return False, "Invalid password or file is corrupted"
         return False, f"Verification failed: {e}"
 
 
